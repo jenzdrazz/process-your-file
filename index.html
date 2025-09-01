@@ -2,40 +2,160 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <title>Upload & Proses Dokumen</title>
+  <title>Doc to Image Converter</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
   <style>
-    #loading { display: none; font-weight: bold; color: blue; }
-    img { max-width: 100%; margin: 10px 0; border: 1px solid #ddd; }
+    body {
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      background: #f5f6fa;
+      margin: 0;
+      padding: 20px;
+      color: #2f3640;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+      font-size: 28px;
+      color: #273c75;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: auto;
+      background: #fff;
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+
+    .file-input {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    label {
+      padding: 12px 20px;
+      background: #0984e3;
+      color: #fff;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    label:hover {
+      background: #74b9ff;
+    }
+
+    .buttons {
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    .btn {
+      margin: 5px;
+      padding: 12px 18px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 600;
+      transition: 0.3s;
+    }
+
+    .btn-process { background: #00cec9; color: #fff; }
+    .btn-process:hover { background: #55efc4; }
+
+    .btn-gallery { background: #6c5ce7; color: #fff; }
+    .btn-gallery:hover { background: #a29bfe; }
+
+    .btn-zip { background: #d63031; color: #fff; }
+    .btn-zip:hover { background: #ff7675; }
+
+    .loading {
+      text-align: center;
+      margin: 20px 0;
+      display: none;
+    }
+
+    .loading span {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      margin: 0 3px;
+      background: #0984e3;
+      border-radius: 50%;
+      animation: bounce 0.6s infinite alternate;
+    }
+
+    .loading span:nth-child(2) { animation-delay: 0.2s; }
+    .loading span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes bounce {
+      from { transform: translateY(0); }
+      to { transform: translateY(-10px); }
+    }
+
+    .output {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 15px;
+      margin-top: 20px;
+    }
+
+    .output img {
+      width: 100%;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      transition: transform 0.3s;
+    }
+
+    .output img:hover {
+      transform: scale(1.05);
+    }
   </style>
 </head>
 <body>
-  <h2>Upload PDF / TXT / Dokumen</h2>
-  <input type="file" id="fileInput" accept=".pdf,.txt">
-  <button id="processBtn">Proses</button>
-  <button id="downloadGalleryBtn" style="display:none;">Download via Galeri</button>
-  <button id="downloadZipBtn" style="display:none;">Download via ZIP</button>
-  <div id="loading">⏳ Sedang diproses...</div>
-  <div id="output"></div>
+  <div class="container">
+    <h1>Konversi Dokumen ke Gambar</h1>
+
+    <div class="file-input">
+      <input type="file" id="fileInput" accept=".pdf,.txt,.doc,.docx">
+      <label for="fileInput">Pilih Dokumen</label>
+    </div>
+
+    <div class="buttons">
+      <button class="btn btn-process" onclick="processFile()">Proses</button>
+      <button class="btn btn-gallery" onclick="downloadGallery()">Download via Galeri</button>
+      <button class="btn btn-zip" onclick="downloadZip()">Download via Zip</button>
+    </div>
+
+    <div class="loading" id="loading">
+      <span></span><span></span><span></span>
+      <p>Sedang memproses, mohon tunggu...</p>
+    </div>
+
+    <div class="output" id="output"></div>
+  </div>
 
   <script>
-    const fileInput = document.getElementById('fileInput');
-    const processBtn = document.getElementById('processBtn');
-    const downloadGalleryBtn = document.getElementById('downloadGalleryBtn');
-    const downloadZipBtn = document.getElementById('downloadZipBtn');
-    const output = document.getElementById('output');
-    const loading = document.getElementById('loading');
+    let images = [];
 
-    let images = []; // simpan hasil gambar
-
-    processBtn.addEventListener('click', async () => {
-      const file = fileInput.files[0];
-      if (!file) return alert("Pilih file dulu!");
-      
-      output.innerHTML = "";
+    async function processFile() {
+      const file = document.getElementById('fileInput').files[0];
+      const output = document.getElementById('output');
+      const loading = document.getElementById('loading');
       images = [];
+      output.innerHTML = "";
+      if (!file) return alert("Pilih file dulu!");
+
       loading.style.display = "block";
 
       if (file.type === "application/pdf") {
@@ -43,80 +163,66 @@
         reader.onload = async function(e) {
           const typedarray = new Uint8Array(e.target.result);
           const pdf = await pdfjsLib.getDocument(typedarray).promise;
-
           for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i);
             const viewport = page.getViewport({ scale: 1.5 });
             const canvas = document.createElement("canvas");
-            const context = canvas.getContext("2d");
-            canvas.height = viewport.height;
+            const ctx = canvas.getContext("2d");
             canvas.width = viewport.width;
-            await page.render({ canvasContext: context, viewport }).promise;
-            
-            const imgData = canvas.toDataURL("image/png");
-            images.push(imgData);
-
+            canvas.height = viewport.height;
+            await page.render({ canvasContext: ctx, viewport }).promise;
             const img = document.createElement("img");
-            img.src = imgData;
+            img.src = canvas.toDataURL("image/png");
+            images.push(canvas.toDataURL("image/png"));
             output.appendChild(img);
           }
           loading.style.display = "none";
-          downloadGalleryBtn.style.display = "inline-block";
-          downloadZipBtn.style.display = "inline-block";
         };
         reader.readAsArrayBuffer(file);
-      } else if (file.type === "text/plain") {
+      } else {
         const reader = new FileReader();
         reader.onload = function(e) {
-          const text = e.target.result;
-          const canvas = document.createElement("canvas");
-          const ctx = canvas.getContext("2d");
-          ctx.font = "16px Arial";
-          canvas.width = 800;
-          canvas.height = 600;
-          ctx.fillStyle = "white";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.fillStyle = "black";
-          ctx.fillText(text, 20, 50);
-          
-          const imgData = canvas.toDataURL("image/png");
-          images.push(imgData);
-
-          const img = document.createElement("img");
-          img.src = imgData;
-          output.appendChild(img);
-
+          const text = e.target.result.split("\n");
+          text.forEach((line, index) => {
+            const canvas = document.createElement("canvas");
+            const ctx = canvas.getContext("2d");
+            canvas.width = 800;
+            canvas.height = 200;
+            ctx.fillStyle = "#fff";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "#2d3436";
+            ctx.font = "20px Segoe UI";
+            ctx.fillText(line, 20, 100);
+            const img = document.createElement("img");
+            img.src = canvas.toDataURL("image/png");
+            images.push(canvas.toDataURL("image/png"));
+            output.appendChild(img);
+          });
           loading.style.display = "none";
-          downloadGalleryBtn.style.display = "inline-block";
-          downloadZipBtn.style.display = "inline-block";
         };
         reader.readAsText(file);
-      } else {
-        loading.style.display = "none";
-        alert("Format file tidak didukung.");
       }
-    });
+    }
 
-    // Download via Galeri (satu-satu)
-    downloadGalleryBtn.addEventListener('click', () => {
-      images.forEach((imgData, index) => {
+    function downloadGallery() {
+      if (!images.length) return alert("Belum ada gambar!");
+      images.forEach((src, i) => {
         const a = document.createElement("a");
-        a.href = imgData;
-        a.download = `halaman-${index + 1}.png`;
+        a.href = src;
+        a.download = `page_${i+1}.png`;
         a.click();
       });
-    });
+    }
 
-    // Download via ZIP
-    downloadZipBtn.addEventListener('click', async () => {
+    async function downloadZip() {
+      if (!images.length) return alert("Belum ada gambar!");
       const zip = new JSZip();
-      images.forEach((imgData, index) => {
-        const base64Data = imgData.split(",")[1];
-        zip.file(`halaman-${index + 1}.png`, base64Data, { base64: true });
+      images.forEach((src, i) => {
+        zip.file(`page_${i+1}.png`, src.split(",")[1], {base64: true});
       });
-      const content = await zip.generateAsync({ type: "blob" });
-      saveAs(content, "dokumen.zip");
-    });
+      const blob = await zip.generateAsync({type: "blob"});
+      saveAs(blob, "document_images.zip");
+    }
   </script>
 </body>
 </html>
