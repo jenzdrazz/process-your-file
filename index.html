@@ -2,155 +2,254 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <title>PDF ke Gambar</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dokumen ke Gambar</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
   <style>
     body {
-      font-family: Arial, sans-serif;
-      background: #f4f7fb;
+      font-family: "Segoe UI", sans-serif;
+      background-color: #0d0d0f;
+      color: #e0e0e0;
+      text-align: center;
       margin: 0;
       padding: 20px;
-      color: #333;
     }
+
     h1 {
-      text-align: center;
-      color: #444;
+      color: #00ffc8;
+      margin-bottom: 15px;
+      font-size: 1.8rem;
     }
+
     .container {
-      max-width: 800px;
+      max-width: 600px;
       margin: auto;
-      background: white;
-      padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 6px 16px rgba(0,0,0,0.1);
+      padding: 15px;
     }
-    input[type=file] {
-      display: block;
-      margin: 15px auto;
+
+    input[type="file"] {
+      display: none;
     }
-    .btn {
-      background: #4f46e5;
-      color: white;
-      border: none;
-      padding: 10px 18px;
-      margin: 6px;
+
+    .file-label {
+      display: inline-block;
+      padding: 12px 20px;
       border-radius: 8px;
+      background: #1e1e22;
+      color: #00ffc8;
       cursor: pointer;
-      transition: 0.2s;
-    }
-    .btn:hover {
-      background: #3730a3;
-    }
-    #loading {
-      text-align: center;
       font-weight: bold;
-      margin: 15px 0;
+      transition: 0.3s;
+      border: 1px solid #00ffc8;
+      margin-bottom: 12px;
     }
-    #gallery {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+
+    .file-label:hover {
+      background: #00ffc8;
+      color: #0d0d0f;
+    }
+
+    .filename {
+      margin-bottom: 20px;
+      font-size: 0.95rem;
+      color: #aaa;
+    }
+
+    .buttons {
+      display: flex;
+      flex-direction: column;
       gap: 12px;
+    }
+
+    button {
+      padding: 14px;
+      font-size: 1rem;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      transition: 0.3s;
+      font-weight: bold;
+    }
+
+    #processBtn {
+      background: #00ffc8;
+      color: #0d0d0f;
+    }
+
+    #processBtn:hover {
+      background: #00cca0;
+    }
+
+    .download-buttons {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+    }
+
+    .download-buttons button {
+      flex: 1;
+    }
+
+    .disabled {
+      background: #333 !important;
+      color: #777 !important;
+      cursor: not-allowed;
+    }
+
+    .active {
+      background: #00ffc8 !important;
+      color: #0d0d0f !important;
+    }
+
+    .loading {
+      margin: 15px 0;
+      font-size: 1rem;
+      color: #00ffc8;
+    }
+
+    #preview {
       margin-top: 20px;
     }
-    #gallery img {
-      width: 100%;
+
+    #preview img {
+      max-width: 100%;
+      margin-bottom: 12px;
       border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-      transition: transform 0.2s;
+      box-shadow: 0 0 10px rgba(0, 255, 200, 0.3);
     }
-    #gallery img:hover {
-      transform: scale(1.05);
+
+    /* 🎬 Animasi smooth muncul */
+    .page-container {
+      opacity: 0;
+      transform: scale(0.95);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+    .page-container.show {
+      opacity: 1;
+      transform: scale(1);
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>PDF ke Gambar</h1>
-    <input type="file" id="fileInput" accept="application/pdf">
-    <div style="text-align:center;">
-      <button id="processBtn" class="btn">Proses</button>
-      <button id="downloadGallery" class="btn" disabled>Download via Galeri</button>
-      <button id="downloadZip" class="btn" disabled>Download via ZIP</button>
+    <h1>Dokumen ke Gambar</h1>
+    
+    <!-- File Picker -->
+    <label for="fileInput" class="file-label">Pilih File</label>
+    <input type="file" id="fileInput" accept=".pdf,.txt,.doc,.docx">
+    <div class="filename" id="filename">Belum ada file dipilih</div>
+
+    <!-- Tombol Proses -->
+    <div class="buttons">
+      <button id="processBtn">Proses</button>
+
+      <!-- Tombol Download -->
+      <div class="download-buttons">
+        <button id="downloadZip" class="disabled">Download via Zip</button>
+        <button id="downloadGallery" class="disabled">Download via Galeri</button>
+      </div>
     </div>
-    <div id="loading"></div>
-    <div id="gallery"></div>
+
+    <!-- Loading & Preview -->
+    <div id="loading" class="loading" style="display:none;">Memproses...</div>
+    <div id="preview"></div>
   </div>
 
   <script>
-    let generatedImages = [];
+    const fileInput = document.getElementById("fileInput");
+    const filename = document.getElementById("filename");
+    const processBtn = document.getElementById("processBtn");
+    const downloadZipBtn = document.getElementById("downloadZip");
+    const downloadGalleryBtn = document.getElementById("downloadGallery");
+    const loading = document.getElementById("loading");
+    const preview = document.getElementById("preview");
 
-    function isCanvasBlank(canvas) {
-      const context = canvas.getContext('2d');
-      const pixelBuffer = new Uint32Array(
-        context.getImageData(0, 0, canvas.width, canvas.height).data.buffer
-      );
-      return !pixelBuffer.some(color => color !== 0);
-    }
+    let images = [];
 
-    document.getElementById("processBtn").addEventListener("click", async () => {
-      const file = document.getElementById("fileInput").files[0];
-      if (!file) return alert("Pilih file PDF dulu!");
-
-      const loadingEl = document.getElementById("loading");
-      loadingEl.textContent = "Sedang memproses...";
-      document.getElementById("gallery").innerHTML = "";
-      generatedImages = [];
-
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      const totalPages = pdf.numPages;
-
-      let validPages = 0;
-      for (let i = 1; i <= totalPages; i++) {
-        loadingEl.textContent = `Memproses halaman ${i}/${totalPages}...`;
-
-        const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 1.5 });
-        const canvas = document.createElement("canvas");
-        const context = canvas.getContext("2d");
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-
-        await page.render({ canvasContext: context, viewport }).promise;
-
-        // skip halaman kosong
-        if (isCanvasBlank(canvas)) continue;
-
-        const imgURL = canvas.toDataURL("image/png");
-        generatedImages.push(imgURL);
-
-        const img = document.createElement("img");
-        img.src = imgURL;
-        document.getElementById("gallery").appendChild(img);
-
-        validPages++;
-      }
-
-      loadingEl.textContent = `Selesai! (${validPages} halaman berhasil diproses)`;
-      document.getElementById("downloadGallery").disabled = false;
-      document.getElementById("downloadZip").disabled = false;
+    fileInput.addEventListener("change", () => {
+      filename.textContent = fileInput.files.length
+        ? "File terpilih: " + fileInput.files[0].name
+        : "Belum ada file dipilih";
     });
 
-    document.getElementById("downloadGallery").addEventListener("click", () => {
-      generatedImages.forEach((img, idx) => {
+    processBtn.addEventListener("click", async () => {
+      if (!fileInput.files.length) {
+        alert("Pilih file dulu!");
+        return;
+      }
+
+      images = [];
+      preview.innerHTML = "";
+      loading.style.display = "block";
+
+      const file = fileInput.files[0];
+      const reader = new FileReader();
+
+      reader.onload = async function () {
+        const typedarray = new Uint8Array(this.result);
+        const pdf = await pdfjsLib.getDocument(typedarray).promise;
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+          loading.textContent = `Memproses halaman ${i}/${pdf.numPages}...`;
+
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: 1.5 });
+          const canvas = document.createElement("canvas");
+          const context = canvas.getContext("2d");
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+
+          await page.render({ canvasContext: context, viewport: viewport }).promise;
+
+          // Buat container animasi
+          const pageContainer = document.createElement("div");
+          pageContainer.className = "page-container";
+
+          const img = document.createElement("img");
+          img.src = canvas.toDataURL();
+          pageContainer.appendChild(img);
+          preview.appendChild(pageContainer);
+
+          // Trigger animasi fade-in
+          setTimeout(() => {
+            pageContainer.classList.add("show");
+          }, 50 * i);
+
+          images.push(canvas.toDataURL("image/png"));
+        }
+
+        loading.style.display = "none";
+        downloadZipBtn.classList.remove("disabled");
+        downloadGalleryBtn.classList.remove("disabled");
+        downloadZipBtn.classList.add("active");
+        downloadGalleryBtn.classList.add("active");
+      };
+
+      reader.readAsArrayBuffer(file);
+    });
+
+    downloadGalleryBtn.addEventListener("click", () => {
+      if (!images.length) return;
+      images.forEach((src, index) => {
         const a = document.createElement("a");
-        a.href = img;
-        a.download = `halaman_${idx+1}.png`;
+        a.href = src;
+        a.download = `halaman-${index + 1}.png`;
         a.click();
       });
     });
 
-    document.getElementById("downloadZip").addEventListener("click", async () => {
-      if (!generatedImages.length) return;
+    downloadZipBtn.addEventListener("click", () => {
+      if (!images.length) return;
       const zip = new JSZip();
-      generatedImages.forEach((img, idx) => {
-        const base64Data = img.split(",")[1];
-        zip.file(`halaman_${idx+1}.png`, base64Data, { base64: true });
+      images.forEach((src, index) => {
+        const data = src.split(",")[1];
+        zip.file(`halaman-${index + 1}.png`, data, { base64: true });
       });
-      const content = await zip.generateAsync({ type: "blob" });
-      saveAs(content, "pdf_to_images.zip");
+      zip.generateAsync({ type: "blob" }).then(content => {
+        saveAs(content, "dokumen.zip");
+      });
     });
   </script>
 </body>
