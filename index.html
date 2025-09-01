@@ -158,99 +158,104 @@
   </div>
 
   <script>
-    const fileInput = document.getElementById("fileInput");
-    const filename = document.getElementById("filename");
-    const processBtn = document.getElementById("processBtn");
-    const downloadZipBtn = document.getElementById("downloadZip");
-    const downloadGalleryBtn = document.getElementById("downloadGallery");
-    const loading = document.getElementById("loading");
-    const preview = document.getElementById("preview");
+  const fileInput = document.getElementById("fileInput");
+  const filename = document.getElementById("filename");
+  const processBtn = document.getElementById("processBtn");
+  const downloadZipBtn = document.getElementById("downloadZip");
+  const downloadGalleryBtn = document.getElementById("downloadGallery");
+  const loading = document.getElementById("loading");
+  const preview = document.getElementById("preview");
 
-    let images = [];
+  let images = [];
 
-    fileInput.addEventListener("change", () => {
-      filename.textContent = fileInput.files.length
-        ? "File terpilih: " + fileInput.files[0].name
-        : "Belum ada file dipilih";
-    });
+  // update label file
+  fileInput.addEventListener("change", () => {
+    filename.textContent = fileInput.files.length
+      ? "File terpilih: " + fileInput.files[0].name
+      : "Belum ada file dipilih";
+  });
 
-    processBtn.addEventListener("click", async () => {
-      if (!fileInput.files.length) {
-        alert("Pilih file dulu!");
-        return;
+  // proses PDF
+  processBtn.addEventListener("click", async () => {
+    if (!fileInput.files.length) {
+      alert("Pilih file dulu!");
+      return;
+    }
+
+    images = [];
+    preview.innerHTML = "";
+    loading.style.display = "block";
+
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+
+    reader.onload = async function () {
+      const typedarray = new Uint8Array(this.result);
+      const pdf = await pdfjsLib.getDocument(typedarray).promise;
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        loading.textContent = `Memproses halaman ${i}/${pdf.numPages}...`;
+
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 1.5 });
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        await page.render({ canvasContext: context, viewport: viewport }).promise;
+
+        // animasi tiap halaman
+        const pageContainer = document.createElement("div");
+        pageContainer.className = "page-container";
+        const img = document.createElement("img");
+        img.src = canvas.toDataURL();
+        pageContainer.appendChild(img);
+        preview.appendChild(pageContainer);
+
+        setTimeout(() => pageContainer.classList.add("show"), 50 * i);
+
+        images.push(canvas.toDataURL("image/png"));
       }
 
-      images = [];
-      preview.innerHTML = "";
-      loading.style.display = "block";
+      loading.style.display = "none";
+      downloadZipBtn.classList.remove("disabled");
+      downloadGalleryBtn.classList.remove("disabled");
+    };
 
-      const file = fileInput.files[0];
-      const reader = new FileReader();
+    reader.readAsArrayBuffer(file);
+  });
 
-      reader.onload = async function () {
-        const typedarray = new Uint8Array(this.result);
-        const pdf = await pdfjsLib.getDocument(typedarray).promise;
+  // download semua via galeri (otomatis satu2)
+  downloadGalleryBtn.addEventListener("click", async () => {
+    if (!images.length) return;
 
-        for (let i = 1; i <= pdf.numPages; i++) {
-          loading.textContent = `Memproses halaman ${i}/${pdf.numPages}...`;
+    for (let i = 0; i < images.length; i++) {
+      const src = images[i];
+      const a = document.createElement("a");
+      a.href = src;
+      a.download = `halaman-${i + 1}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
 
-          const page = await pdf.getPage(i);
-          const viewport = page.getViewport({ scale: 1.5 });
-          const canvas = document.createElement("canvas");
-          const context = canvas.getContext("2d");
-          canvas.height = viewport.height;
-          canvas.width = viewport.width;
+      // kasih jeda biar gak ke-block browser
+      await new Promise(r => setTimeout(r, 500));
+    }
+  });
 
-          await page.render({ canvasContext: context, viewport: viewport }).promise;
-
-          // Buat container animasi
-          const pageContainer = document.createElement("div");
-          pageContainer.className = "page-container";
-
-          const img = document.createElement("img");
-          img.src = canvas.toDataURL();
-          pageContainer.appendChild(img);
-          preview.appendChild(pageContainer);
-
-          // Trigger animasi fade-in
-          setTimeout(() => {
-            pageContainer.classList.add("show");
-          }, 50 * i);
-
-          images.push(canvas.toDataURL("image/png"));
-        }
-
-        loading.style.display = "none";
-        downloadZipBtn.classList.remove("disabled");
-        downloadGalleryBtn.classList.remove("disabled");
-        downloadZipBtn.classList.add("active");
-        downloadGalleryBtn.classList.add("active");
-      };
-
-      reader.readAsArrayBuffer(file);
+  // download semua via zip
+  downloadZipBtn.addEventListener("click", () => {
+    if (!images.length) return;
+    const zip = new JSZip();
+    images.forEach((src, index) => {
+      const data = src.split(",")[1];
+      zip.file(`halaman-${index + 1}.png`, data, { base64: true });
     });
-
-    downloadGalleryBtn.addEventListener("click", () => {
-      if (!images.length) return;
-      images.forEach((src, index) => {
-        const a = document.createElement("a");
-        a.href = src;
-        a.download = `halaman-${index + 1}.png`;
-        a.click();
-      });
+    zip.generateAsync({ type: "blob" }).then(content => {
+      saveAs(content, "dokumen.zip");
     });
-
-    downloadZipBtn.addEventListener("click", () => {
-      if (!images.length) return;
-      const zip = new JSZip();
-      images.forEach((src, index) => {
-        const data = src.split(",")[1];
-        zip.file(`halaman-${index + 1}.png`, data, { base64: true });
-      });
-      zip.generateAsync({ type: "blob" }).then(content => {
-        saveAs(content, "dokumen.zip");
-      });
-    });
-  </script>
+  });
+</script>
 </body>
 </html>
