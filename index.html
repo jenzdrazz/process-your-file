@@ -2,163 +2,92 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <title>Viewer Dokumen</title>
+  <title>Dokumen ke Gambar</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
   <style>
-    body { font-family: sans-serif; text-align: center; }
-    #preview img, #preview .text-page {
-      width: 200px; margin: 5px; border: 1px solid #ccc; padding: 5px; display: inline-block; white-space: pre-wrap;
-    }
     #loading { display: none; font-weight: bold; color: green; }
-    .btn { margin: 10px; padding: 10px 15px; cursor: pointer; border: none; border-radius: 5px; }
-    .btn-blue { background: #007bff; color: white; }
-    .btn-green { background: #28a745; color: white; }
+    #output img { margin: 5px; border: 1px solid #ddd; max-width: 200px; }
+    button { margin: 5px; padding: 10px 15px; }
   </style>
 </head>
 <body>
-  <h2>Upload & Convert Dokumen</h2>
-  <input type="file" id="fileInput" accept=".pdf,.txt,.docx">
+  <h2>Upload Dokumen</h2>
+  <input type="file" id="fileInput" accept=".pdf" />
   <br><br>
-  <button class="btn btn-blue" onclick="showGallery()">Lihat Galeri</button>
-  <button class="btn btn-green" onclick="downloadZip()">Download ZIP</button>
-  <p id="loading">⏳ Sedang diproses...</p>
-  <div id="preview"></div>
+  <button id="processBtn">Proses</button>
+  <button id="downloadGalleryBtn" style="display:none;">Download via Galeri</button>
+  <button id="downloadZipBtn" style="display:none;">Download via ZIP</button>
+  <p id="loading">Sedang memproses, tunggu...</p>
+  <div id="output"></div>
 
   <script>
-    let images = []; // untuk PDF
-    let texts = [];  // untuk TXT & DOCX
+    let images = []; // simpan semua gambar hasil render
 
-    async function renderPDF(file) {
+    document.getElementById('processBtn').addEventListener('click', async () => {
+      const file = document.getElementById('fileInput').files[0];
+      if (!file) {
+        alert("Pilih file PDF dulu!");
+        return;
+      }
+
+      images = [];
+      document.getElementById('output').innerHTML = "";
+      document.getElementById('loading').style.display = "block";
+
       const fileReader = new FileReader();
-      return new Promise((resolve) => {
-        fileReader.onload = async function() {
-          const typedArray = new Uint8Array(this.result);
-          const pdf = await pdfjsLib.getDocument(typedArray).promise;
-          let result = [];
-          for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const viewport = page.getViewport({ scale: 2 });
-            const canvas = document.createElement("canvas");
-            const context = canvas.getContext("2d");
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-            await page.render({ canvasContext: context, viewport }).promise;
-            result.push(canvas.toDataURL("image/png"));
-          }
-          resolve(result);
-        };
-        fileReader.readAsArrayBuffer(file);
-      });
-    }
+      fileReader.onload = async function() {
+        const typedarray = new Uint8Array(this.result);
+        const pdf = await pdfjsLib.getDocument(typedarray).promise;
 
-    async function renderTXT(file) {
-      const text = await file.text();
-      const lines = text.split("\n");
-      let pages = [];
-      let chunk = [];
-      lines.forEach((line, i) => {
-        chunk.push(line);
-        if (chunk.length >= 40 || i === lines.length - 1) {
-          pages.push(chunk.join("\n"));
-          chunk = [];
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: 1.5 });
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+
+          await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+
+          const imgData = canvas.toDataURL("image/png");
+          images.push(imgData);
+
+          const imgElement = document.createElement("img");
+          imgElement.src = imgData;
+          document.getElementById('output').appendChild(imgElement);
         }
+
+        document.getElementById('loading').style.display = "none";
+        document.getElementById('downloadGalleryBtn').style.display = "inline-block";
+        document.getElementById('downloadZipBtn').style.display = "inline-block";
+      };
+      fileReader.readAsArrayBuffer(file);
+    });
+
+    // Download via Galeri (satu-satu)
+    document.getElementById('downloadGalleryBtn').addEventListener('click', () => {
+      images.forEach((imgData, idx) => {
+        const a = document.createElement('a');
+        a.href = imgData;
+        a.download = `halaman_${idx + 1}.png`;
+        a.click();
       });
-      return pages;
-    }
+    });
 
-    async function renderDOCX(file) {
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = async function(event) {
-          const arrayBuffer = event.target.result;
-          mammoth.extractRawText({ arrayBuffer }).then(result => {
-            const lines = result.value.split("\n");
-            let pages = [];
-            let chunk = [];
-            lines.forEach((line, i) => {
-              chunk.push(line);
-              if (chunk.length >= 40 || i === lines.length - 1) {
-                pages.push(chunk.join("\n"));
-                chunk = [];
-              }
-            });
-            resolve(pages);
-          });
-        };
-        reader.readAsArrayBuffer(file);
+    // Download via ZIP
+    document.getElementById('downloadZipBtn').addEventListener('click', async () => {
+      if (images.length === 0) return;
+      const zip = new JSZip();
+      images.forEach((imgData, idx) => {
+        const base64Data = imgData.split(',')[1];
+        zip.file(`halaman_${idx + 1}.png`, base64Data, {base64: true});
       });
-    }
 
-    async function showGallery() {
-      const file = document.getElementById("fileInput").files[0];
-      if (!file) return alert("Pilih file dulu!");
-      document.getElementById("loading").style.display = "block";
-      const ext = file.name.split(".").pop().toLowerCase();
-      const preview = document.getElementById("preview");
-      preview.innerHTML = "";
-
-      if (ext === "pdf") {
-        images = await renderPDF(file);
-        images.forEach(img => {
-          const image = document.createElement("img");
-          image.src = img;
-          preview.appendChild(image);
-        });
-      } else if (ext === "txt") {
-        texts = await renderTXT(file);
-        texts.forEach(page => {
-          const div = document.createElement("div");
-          div.className = "text-page";
-          div.textContent = page;
-          preview.appendChild(div);
-        });
-      } else if (ext === "docx") {
-        texts = await renderDOCX(file);
-        texts.forEach(page => {
-          const div = document.createElement("div");
-          div.className = "text-page";
-          div.textContent = page;
-          preview.appendChild(div);
-        });
-      } else {
-        alert("Format tidak didukung!");
-      }
-      document.getElementById("loading").style.display = "none";
-    }
-
-    async function downloadZip() {
-      const file = document.getElementById("fileInput").files[0];
-      if (!file) return alert("Pilih file dulu!");
-      document.getElementById("loading").style.display = "block";
-      const ext = file.name.split(".").pop().toLowerCase();
-      let zip = new JSZip();
-
-      if (ext === "pdf") {
-        images = await renderPDF(file);
-        images.forEach((img, i) => {
-          const base64 = img.split(",")[1];
-          zip.file("page_" + (i+1) + ".png", base64, {base64: true});
-        });
-      } else if (ext === "txt") {
-        texts = await renderTXT(file);
-        texts.forEach((page, i) => {
-          zip.file("page_" + (i+1) + ".txt", page);
-        });
-      } else if (ext === "docx") {
-        texts = await renderDOCX(file);
-        texts.forEach((page, i) => {
-          zip.file("page_" + (i+1) + ".txt", page);
-        });
-      }
-
-      zip.generateAsync({type:"blob"}).then(function(content) {
-        saveAs(content, "dokumen.zip");
-        document.getElementById("loading").style.display = "none";
-      });
-    }
+      const content = await zip.generateAsync({ type: "blob" });
+      saveAs(content, "dokumen_gambar.zip");
+    });
   </script>
 </body>
 </html>
