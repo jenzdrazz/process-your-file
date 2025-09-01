@@ -2,151 +2,151 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <title>PDF / DOC to Image Converter</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF ke Gambar</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
   <style>
     body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: #f3f4f6;
+      font-family: 'Segoe UI', sans-serif;
+      background: #f4f6f9;
+      margin: 0;
+      padding: 0;
       color: #333;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 30px;
     }
     .container {
-      background: white;
-      padding: 25px;
-      border-radius: 15px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      max-width: 800px;
-      width: 100%;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+    }
+    h1 {
       text-align: center;
+      color: #444;
+      margin-bottom: 20px;
+    }
+    .controls {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 20px;
     }
     input[type=file] {
-      padding: 10px;
-      border: 2px dashed #ccc;
-      border-radius: 12px;
-      background: #fafafa;
-      cursor: pointer;
-      margin-bottom: 20px;
-      width: 100%;
+      display: none;
     }
-    button {
-      background: linear-gradient(135deg, #4f46e5, #3b82f6);
-      color: white;
+    .btn {
+      background: #007bff;
       border: none;
-      padding: 12px 20px;
-      margin: 10px;
-      border-radius: 10px;
-      cursor: pointer;
+      color: white;
+      padding: 10px 20px;
       font-size: 15px;
+      border-radius: 8px;
+      cursor: pointer;
       transition: 0.3s;
     }
-    button:hover {
-      transform: scale(1.05);
-      background: linear-gradient(135deg, #3b82f6, #2563eb);
+    .btn:hover {
+      background: #0056b3;
+    }
+    .btn:disabled {
+      background: #999;
+      cursor: not-allowed;
     }
     #status {
-      margin: 15px 0;
+      text-align: center;
+      margin-bottom: 15px;
       font-weight: bold;
-      color: #4f46e5;
+      color: #555;
     }
-    #preview img {
-      max-width: 100%;
-      margin: 10px 0;
-      border-radius: 12px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill,minmax(200px,1fr));
+      gap: 15px;
     }
-    .hidden {
-      display: none;
+    .gallery img {
+      width: 100%;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Convert Dokumen ke Gambar</h1>
-    <input type="file" id="fileInput" accept=".pdf,.txt,.doc,.docx" />
-    <br>
-    <button id="processBtn">Proses</button>
-    <button id="downloadGalleryBtn" class="hidden">Download via Galeri</button>
-    <button id="downloadZipBtn" class="hidden">Download via Zip</button>
+    <h1>Konversi PDF ke Gambar</h1>
+    <div class="controls">
+      <label for="pdfFile" class="btn">Pilih PDF</label>
+      <input type="file" id="pdfFile" accept="application/pdf">
+      <button id="processBtn" class="btn">Proses</button>
+      <button id="downloadGalleryBtn" class="btn" disabled>Download via Galeri</button>
+      <button id="downloadZipBtn" class="btn" disabled>Download via Zip</button>
+    </div>
     <div id="status"></div>
-    <div id="preview"></div>
+    <div id="gallery" class="gallery"></div>
   </div>
 
   <script>
-    let imagesData = [];
+    let images = [];
 
     document.getElementById('processBtn').addEventListener('click', async () => {
-      const file = document.getElementById('fileInput').files[0];
-      if (!file) {
-        alert("Pilih file terlebih dahulu!");
-        return;
-      }
+      const file = document.getElementById('pdfFile').files[0];
+      if (!file) return alert("Pilih file PDF dulu!");
 
-      imagesData = [];
-      document.getElementById('preview').innerHTML = '';
-      document.getElementById('status').innerText = "Memproses...";
+      images = [];
+      document.getElementById('gallery').innerHTML = "";
+      document.getElementById('status').innerText = "Memuat PDF...";
 
-      if (file.type === "application/pdf") {
-        const fileReader = new FileReader();
-        fileReader.onload = async function () {
-          const typedarray = new Uint8Array(this.result);
-          const pdf = await pdfjsLib.getDocument(typedarray).promise;
+      const fileReader = new FileReader();
+      fileReader.onload = async function() {
+        const typedarray = new Uint8Array(this.result);
+        const pdf = await pdfjsLib.getDocument(typedarray).promise;
+        const totalPages = pdf.numPages;
 
-          for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-            document.getElementById('status').innerText = 
-              `Memproses halaman ${pageNum}/${pdf.numPages}...`;
+        for (let i = 1; i <= totalPages; i++) {
+          document.getElementById('status').innerText = `Memproses halaman ${i} / ${totalPages}...`;
 
-            const page = await pdf.getPage(pageNum);
-            const viewport = page.getViewport({ scale: 1.5 });
-            const canvas = document.createElement("canvas");
-            const context = canvas.getContext("2d");
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: 1.5 });
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
 
-            await page.render({ canvasContext: context, viewport: viewport }).promise;
-            const imgData = canvas.toDataURL("image/png");
+          await page.render({ canvasContext: context, viewport: viewport }).promise;
+          const imgData = canvas.toDataURL('image/png');
+          images.push(imgData);
 
-            imagesData.push(imgData);
+          const img = document.createElement('img');
+          img.src = imgData;
+          document.getElementById('gallery').appendChild(img);
+        }
 
-            const img = document.createElement("img");
-            img.src = imgData;
-            document.getElementById('preview').appendChild(img);
-          }
-
-          document.getElementById('status').innerText = "Selesai ✅";
-          document.getElementById('downloadGalleryBtn').classList.remove("hidden");
-          document.getElementById('downloadZipBtn').classList.remove("hidden");
-        };
-        fileReader.readAsArrayBuffer(file);
-      } else {
-        document.getElementById('status').innerText = "Hanya PDF yang didukung untuk preview.";
-      }
+        document.getElementById('status').innerText = "Selesai!";
+        document.getElementById('downloadGalleryBtn').disabled = false;
+        document.getElementById('downloadZipBtn').disabled = false;
+      };
+      fileReader.readAsArrayBuffer(file);
     });
 
-    // Download satu-satu via galeri
     document.getElementById('downloadGalleryBtn').addEventListener('click', () => {
-      imagesData.forEach((dataUrl, index) => {
-        const a = document.createElement("a");
-        a.href = dataUrl;
-        a.download = `halaman_${index + 1}.png`;
+      images.forEach((img, i) => {
+        const a = document.createElement('a');
+        a.href = img;
+        a.download = `halaman_${i + 1}.png`;
         a.click();
       });
     });
 
-    // Download semua via ZIP
-    document.getElementById('downloadZipBtn').addEventListener('click', async () => {
+    document.getElementById('downloadZipBtn').addEventListener('click', () => {
+      if (!images.length) return;
       const zip = new JSZip();
-      imagesData.forEach((dataUrl, index) => {
-        const base64Data = dataUrl.split(',')[1];
-        zip.file(`halaman_${index + 1}.png`, base64Data, { base64: true });
+      images.forEach((img, i) => {
+        zip.file(`halaman_${i + 1}.png`, img.split(',')[1], { base64: true });
       });
-      const content = await zip.generateAsync({ type: "blob" });
-      saveAs(content, "dokumen_gambar.zip");
+      zip.generateAsync({ type: "blob" }).then(content => {
+        saveAs(content, "dokumen.zip");
+      });
     });
   </script>
 </body>
